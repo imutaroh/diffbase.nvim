@@ -1,0 +1,608 @@
+*diffbase.txt*  Choose what to diff against, right in your editing view
+
+Author:  imutaroh
+License: MIT
+
+==============================================================================
+CONTENTS                                                   *diffbase-contents*
+
+  1. Introduction ......................................... |diffbase-intro|
+  2. Requirements .................................. |diffbase-requirements|
+  3. Setup ................................................. |diffbase-setup|
+  4. Commands ........................................... |diffbase-commands|
+  5. Commit view ..................................... |diffbase-commit-view|
+  6. API ..................................................... |diffbase-api|
+  7. Events ............................................... |diffbase-events|
+  8. Configuration ........................................ |diffbase-config|
+  9. Highlights ....................................... |diffbase-highlights|
+  10. neo-tree ........................................... |diffbase-neotree|
+  11. Statusline ...................................... |diffbase-statusline|
+  12. FAQ ................................................... |diffbase-faq|
+  13. Known limitations ............................. |diffbase-limitations|
+
+==============================================================================
+1. INTRODUCTION                                               *diffbase-intro*
+
+You choose what to diff against: the default branch, the previous commit,
+unpushed work, or any single commit. Your normal editing view then shows a
+GitHub-style PR diff:
+
+- green and red line backgrounds, word diff and deleted lines (through
+  gitsigns.nvim),
+- every line of a new file painted green, including untracked files (works
+  without gitsigns),
+- "+added -removed" next to every changed file in neo-tree; directories show
+  the total of everything under them. Submodules are not counted.
+
+No diff tab is opened and the layout is not changed. Stats are computed
+asynchronously with |vim.system()| and refreshed with a debounce.
+diffbase defines no keymaps.
+
+==============================================================================
+2. REQUIREMENTS                                        *diffbase-requirements*
+
+- Neovim >= 0.10
+- git >= 2.24 (`:checkhealth diffbase` checks it)
+- A Unix-like OS. diffbase passes "/dev/null" to git, so Windows is not
+  supported.
+- Optional: gitsigns.nvim (v1 or v2) for line and word highlights.
+  diffbase waits for gitsigns' completion callback of each base change
+  (gitsigns v0.8 and newer call it).
+- Optional: neo-tree.nvim for counts in the file tree (any build). If you
+  opt in to `neotree = { git_base = true }`, use neo-tree 3.42.0 or newer,
+  the first release with commit 6679b93 (2026-08-05, PR #2072). Older
+  builds fail with "attempt to index local 'git_status' (a boolean value)"
+  on every render whenever any git base is set. diffbase detects such a
+  build and then does not set neo-tree's git base (it warns once; the
+  counts still work). See |diffbase-faq|. Current builds blank neo-tree's
+  own git markers when a git base is set on an open tree; see
+  |diffbase-neotree-markers|.
+
+Without the optional plugins, the new-file highlight, the stats API, the
+statusline string and the commands still work.
+
+==============================================================================
+3. SETUP                                                      *diffbase-setup*
+
+Calling setup is optional. Without it, diffbase uses the defaults on first
+use.
+
+lazy.nvim and `vim.pack` generate the help tags for plugins they clone. For
+a local checkout (lazy.nvim `dir =` or `dev = true`), run `:helptags ALL`
+once so that `:help diffbase` works.
+
+lazy.nvim: >lua
+    {
+      "imutaroh/diffbase.nvim",
+      cmd = "DiffBase",
+      keys = {
+        { "<leader>gn", function() require("diffbase").pick() end,
+          desc = "Diff against… (diffbase)" },
+      },
+      opts = {},
+    }
+<
+vim.pack (Neovim 0.12+): >lua
+    vim.pack.add({ "https://github.com/imutaroh/diffbase.nvim" })
+    require("diffbase").setup()
+    vim.keymap.set("n", "<leader>gn", function()
+      require("diffbase").pick()
+    end, { desc = "Diff against… (diffbase)" })
+<
+For neo-tree, see |diffbase-neotree|.
+
+==============================================================================
+4. COMMANDS                                                *diffbase-commands*
+
+                                                                   *:DiffBase*
+:DiffBase [pick]        Open the menu: "Back to …" (only in commit view),
+                        each base in |diffbase-config-bases|, "Pick a
+                        commit…" (only with |diffbase-config-commit_view|),
+                        and "Off" (only while on).
+
+:DiffBase {name}        Diff against the base called {name}. The defaults
+                        are:
+                          main      merge-base with the default branch
+                          previous  HEAD~1
+                          unpushed  merge-base with @{upstream}
+
+:DiffBase ref {ref}     Diff against any git ref. Completion offers HEAD,
+                        branches, remote branches and tags.
+
+:DiffBase commit        Pick a commit and view only its changes. This
+                        detaches HEAD. Needs |diffbase-config-commit_view|;
+                        otherwise it only warns. See |diffbase-commit-view|.
+
+:DiffBase back          Leave commit view, switch back, and turn off.
+
+:DiffBase off           Turn off and restore gitsigns, highlights and
+                        neo-tree. This does NOT leave commit view.
+
+:DiffBase refresh       Recompute the stats (debounced).
+
+The subcommands pick, commit, back, off, refresh and ref are checked first,
+so a base with one of these names cannot be reached as `:DiffBase {name}`.
+
+==============================================================================
+5. COMMIT VIEW                                          *diffbase-commit-view*
+
+Commit view is opt-in because it changes your checkout. Enable it with: >lua
+    require("diffbase").setup({ commit_view = true })
+<
+This adds "Pick a commit…" to the menu and enables `:DiffBase commit` (while
+it is off, that command only warns how to enable it). Picking a commit runs
+`git switch --detach {commit}` and diffs against the commit's parent. A root
+commit is diffed against the empty tree.
+
+Which commits are listed:
+  The commits in `{default branch}..HEAD`. When that range is empty, the
+  last |diffbase-config-commit_list_limit| commits of HEAD are listed
+  instead.
+
+When it refuses:
+  If tracked files have uncommitted changes (staged or not), or a buffer of
+  a file in the repository has unsaved changes, it refuses. While one
+  repository is in commit view, neither commit view nor any other base
+  can start in another one; run `:DiffBase back` first. Untracked files
+  do not block it. Submodules are ignored for this check: `git switch`
+  does not update submodule checkouts, so a submodule whose checkout no
+  longer matches the viewed commit is not a change.
+
+What is counted:
+  Only what the commit changed. Untracked working-tree files are neither
+  counted nor marked as new while in commit view.
+
+Picking again:
+  While in commit view, the list is built from the branch (or commit) you
+  will return to, not from the detached HEAD.
+
+Going back:
+  |:DiffBase| back, or "Back to …" at the top of the menu, switches back to
+  the branch (or commit) you came from. It refuses if tracked files were
+  changed while viewing the commit, or a buffer of the repository has
+  unsaved changes.
+
+Switching outside Neovim:
+  If HEAD is no longer detached at the viewed commit (e.g. after
+  `git switch` in a terminal), commit view is over: back and the next
+  commit view never switch you away from where you are now. back then only
+  warns and turns off.
+
+Off while detached:
+  `:DiffBase off` turns the highlights off but leaves HEAD detached.
+  |diffbase.status()| then returns "Δ detached (from {branch})".
+
+Quitting while detached:
+  diffbase does nothing when Neovim quits. If you quit Neovim while viewing
+  a commit, run `git switch -` to return (or `git switch {branch}` if you
+  hopped between several commits).
+
+==============================================================================
+6. API                                                          *diffbase-api*
+
+All functions are on `require("diffbase")`.
+
+diffbase.setup({opts})                                      *diffbase.setup()*
+    Configure diffbase. {opts} is optional; see |diffbase-config|.
+
+diffbase.pick()                                              *diffbase.pick()*
+    Open the |vim.ui.select()| menu. Same as |:DiffBase|.
+
+diffbase.set({ref}, {opts})                                   *diffbase.set()*
+    Diff against {ref} and return true, or warn and return false.
+
+    {ref} is a git ref string, or a function that receives
+    `{ root = string, default_branch = string|nil }` and returns a ref. The
+    ref "@default" means the default branch.
+
+    {opts} (optional) is a table:
+      merge_base  boolean  Diff against `git merge-base {ref} HEAD`.
+      label       string   Menu and notification text. Defaults to the ref.
+      name        string   Short name for |diffbase.status()|. Defaults to
+                           the ref.
+    "@default" and a function ref default to the ref they resolve to (for
+    example "origin/main"). A ref with the same name as a configured base
+    defaults to "ref:{ref}", so it is not mistaken for that base in the
+    statusline or the menu.
+
+    Also returns false while another repository is in commit view.
+
+    The ref is resolved to a commit once, when you set it. Later refreshes
+    recompute the stats against that same commit.
+
+diffbase.set_preset({name})                            *diffbase.set_preset()*
+    Diff against the base called {name} in |diffbase-config-bases|. Returns
+    a boolean.
+
+diffbase.view_commit()                                *diffbase.view_commit()*
+    Open the commit picker. See |diffbase-commit-view|.
+
+diffbase.back()                                              *diffbase.back()*
+    Leave commit view and turn off. Returns a boolean.
+
+diffbase.off()                                                *diffbase.off()*
+    Turn off. Restores the gitsigns base and toggles, the saved highlights
+    and neo-tree's git base, and clears the new-file marks.
+
+diffbase.refresh()                                        *diffbase.refresh()*
+    Recompute the stats (debounced by |diffbase-config-debounce_ms|).
+
+diffbase.get()                                                *diffbase.get()*
+    Return a table describing the current state:
+      base           string|nil  Commit diffed against (the empty tree for
+                                 a root commit).
+      label          string|nil  Long label.
+      name           string|nil  Short name.
+      root           string|nil  Normalized repository root.
+      detached_from  string|nil  Branch (or commit) to return to while in
+                                 commit view.
+
+diffbase.stats({path})                                      *diffbase.stats()*
+    Return `{ added, removed, binary, new }` for a file or directory, or
+    nil when diffbase is off or the path has no changes. {path} defaults to
+    the current buffer.
+    - Directories return the total of everything under them. Their `binary`
+      and `new` fields are always false.
+    - `new` is true for files absent in the base, including untracked files.
+    - Paths are resolved with realpath, so symlinked checkouts work. A
+      symlink tracked by git reports its own stats; a symlink from outside
+      the repository into it reports its target's.
+
+diffbase.status()                                          *diffbase.status()*
+    Return a statusline string:
+      ""                            off
+      "Δ main +120 -34"             a base is set
+      "Δ ref:main +5 -1"            `:DiffBase ref main` (a ref with the
+                                    name of a base)
+      "Δ commit 9cce4ec +5 -1"      commit view
+      "Δ detached (from feature)"   off, but still in commit view
+    The counts appear once the first computation finishes.
+
+                                                     *diffbase._open_commit()*
+diffbase._open_commit({root}, {sha}, {text})
+    Open commit view for {sha} without the picker. It is exposed for custom
+    pickers and tests, and is not covered by API stability.
+
+==============================================================================
+7. EVENTS                                                    *diffbase-events*
+
+                                                             *DiffBaseChanged*
+The |User| autocmd "DiffBaseChanged" fires with `data = diffbase.get()`:
+- after each stats computation finishes (state is already updated),
+- after |diffbase.off()|,
+- after |diffbase.back()|.
+>lua
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "DiffBaseChanged",
+      callback = function(ev) vim.cmd.redrawstatus() end,
+    })
+<
+==============================================================================
+8. CONFIGURATION                                             *diffbase-config*
+
+Defaults: >lua
+    require("diffbase").setup({
+      default_branch = nil,
+      bases = {
+        { name = "main",
+          label = "Changes on this branch (vs default branch)",
+          ref = "@default", merge_base = true },
+        { name = "previous", label = "Last commit", ref = "HEAD~1" },
+        { name = "unpushed", label = "Not pushed yet",
+          ref = "@{upstream}", merge_base = true },
+      },
+      commit_view = false,
+      commit_list_limit = 20,
+      include_untracked = true,
+      gitsigns = { enabled = true, linehl = true, numhl = true,
+                   word_diff = true, show_deleted = true },
+      neotree = { git_base = false },
+      new_file_highlight = true,
+      colors = {
+        dark = {
+          new_line = "#1f3d2b", new_word = "#2f6f47", new_fg = "#3fb950",
+          old_line = "#4a1f27", old_word = "#8b2f3c", old_fg = "#f85149",
+        },
+        light = {
+          new_line = "#dafbe1", new_word = "#aceebb", new_fg = "#1a7f37",
+          old_line = "#ffebe9", old_word = "#ffcecb", old_fg = "#cf222e",
+        },
+      },
+      stat_format = nil,
+      refresh_events = { "BufWritePost", "FocusGained" },
+      debounce_ms = 150,
+    })
+<
+How options are merged and checked:
+- Tables are deep-merged with the defaults.
+- `bases` and `refresh_events` replace the defaults when you set them; they
+  are not merged.
+- If any option has the wrong type (each palette color must be a string or
+  a number), one warning lists every problem and ALL options fall back to
+  the defaults.
+- A color string that Neovim does not accept (e.g. a misspelled name)
+  produces one warning; the affected groups are left alone.
+- Unknown keys (top level, and inside `gitsigns` / `neotree`) produce one
+  warning, shown once per session.
+
+                                              *diffbase-config-default_branch*
+default_branch ~
+    nil, or the ref that "@default" means. When nil, diffbase tries
+    origin/HEAD, then origin/main, origin/master, main, master.
+
+                                                       *diffbase-config-bases*
+bases ~
+    List of menu entries, in order. Each entry has:
+      name        string                Used by `:DiffBase {name}`.
+      label       string                Menu text.
+      ref         string|function(ctx)  A ref, "@default", or a function.
+      merge_base  boolean (optional)    Diff against the merge-base with
+                                        HEAD.
+
+                                                 *diffbase-config-commit_view*
+commit_view ~
+    Enable commit view (|diffbase-commit-view|): "Pick a commit…" in the
+    menu and `:DiffBase commit`. It runs `git switch --detach`. Default
+    false.
+
+                                           *diffbase-config-commit_list_limit*
+commit_list_limit ~
+    Number of commits listed when `{default branch}..HEAD` is empty. A
+    positive integer. Default 20.
+
+                                           *diffbase-config-include_untracked*
+include_untracked ~
+    Count untracked files as added lines and mark them as new. Default true.
+    Not applied in commit view (|diffbase-commit-view|).
+
+                                                    *diffbase-config-gitsigns*
+gitsigns ~
+    `enabled` turns the gitsigns integration on or off. `linehl`, `numhl`,
+    `word_diff` and `show_deleted` choose which gitsigns toggles are turned
+    on. Only the toggles set to true are saved and later restored, together
+    with gitsigns' global base (see |diffbase-limitations|).
+
+                                                     *diffbase-config-neotree*
+neotree ~
+    `git_base`: also set neo-tree's git base and refresh its git status, so
+    its M/A markers use the same base. Default false, because of neo-tree
+    bugs (see |diffbase-neotree-markers|). Either way diffbase redraws
+    neo-tree (only if it is already loaded) so the component
+    (|diffbase-neotree|) follows every change.
+
+                                          *diffbase-config-new_file_highlight*
+new_file_highlight ~
+    Paint every line of files absent in the base with |hl-DiffBaseNewLine|
+    and |hl-DiffBaseNewNr|. Default true.
+
+                                                      *diffbase-config-colors*
+colors ~
+    A table with `dark` and `light` palettes, chosen by 'background'. Keys:
+    new_line, new_word, new_fg, old_line, old_word, old_fg.
+    Set it to false to leave all highlight groups alone.
+
+                                                 *diffbase-config-stat_format*
+stat_format ~
+    nil, or a function that receives the |diffbase.stats()| table and
+    returns either a string (shown with NeoTreeDimText; "" hides it) or a
+    list of `{ text = ..., highlight = ... }` chunks. When nil, the text is
+    " +A -R", or " bin" for binary files.
+
+                                              *diffbase-config-refresh_events*
+refresh_events ~
+    Autocmd events that trigger a debounced recompute while on.
+    `{}` disables them. Default `{ "BufWritePost", "FocusGained" }`.
+
+                                                 *diffbase-config-debounce_ms*
+debounce_ms ~
+    Debounce delay for refreshes, in milliseconds (an integer >= 0).
+    Default 150.
+
+==============================================================================
+9. HIGHLIGHTS                                            *diffbase-highlights*
+
+                                                          *hl-DiffBaseNewLine*
+DiffBaseNewLine     Line background of files absent in the base.
+                    Links to |hl-DiffAdd| by default.
+                                                            *hl-DiffBaseNewNr*
+DiffBaseNewNr       Line number of those files. Links to |hl-DiffAdd| by
+                    default.
+
+When |diffbase-config-colors| is not false, diffbase does the following
+while it is on:
+- It saves the current definitions of the groups below and of the two
+  groups above, then paints them with the palette. Your own definitions of
+  DiffBaseNewLine and DiffBaseNewNr are overridden until it turns off.
+- On |ColorScheme|, or when 'background' changes, it saves the groups again
+  and repaints them, on the next event-loop turn (see
+  |diffbase-limitations|).
+- When it turns off, it restores the saved definitions exactly. A group that
+  was undefined stays undefined.
+
+These are the gitsigns groups it paints:
+  new_line  GitSignsAddLn GitSignsChangeLn GitSignsChangedeleteLn
+            GitSignsUntrackedLn
+  new_word  GitSignsAddLnInline GitSignsChangeLnInline GitSignsAddInline
+            GitSignsChangeInline GitSignsAddVirtLnInline
+            GitSignsChangeVirtLnInline
+  old_line  GitSignsDeleteLn GitSignsTopdeleteLn GitSignsDeleteVirtLn
+  old_word  GitSignsDeleteLnInline GitSignsDeleteInline
+            GitSignsDeleteVirtLnInline GitSignsDeleteVirtLnInLine
+  new_fg    GitSignsAddNr GitSignsChangeNr GitSignsChangedeleteNr
+            GitSignsUntrackedNr (bold)
+  old_fg    GitSignsDeleteNr GitSignsTopdeleteNr (bold)
+
+The neo-tree counts use NeoTreeGitAdded, NeoTreeGitDeleted and
+NeoTreeDimText.
+
+==============================================================================
+10. NEO-TREE                                                *diffbase-neotree*
+
+Module: `require("diffbase.integrations.neotree")`
+
+setup_opts({opts})                              *diffbase-neotree-setup_opts*
+    Patch neo-tree setup options and return them. Calling it again gives
+    the same result.
+    - It registers the "diffbase" component for every built-in source
+      (filesystem, buffers, git_status, document_symbols) and each plain
+      source name in `opts.sources`. They share the patched renderers;
+      without the component a source shows "Component diffbase not found."
+      in every row.
+    - It inserts `{ "diffbase", zindex = 10 }` right after "name" in the
+      "container" of the file and directory renderers.
+    - If you have not configured those renderers, it copies neo-tree's
+      defaults first.
+>lua
+    {
+      "nvim-neo-tree/neo-tree.nvim",
+      dependencies = {
+        "nvim-lua/plenary.nvim",
+        "MunifTanjim/nui.nvim",
+        "imutaroh/diffbase.nvim",
+      },
+      opts = function(_, opts)
+        return require("diffbase.integrations.neotree").setup_opts(opts)
+      end,
+    }
+<
+    With an existing neo-tree spec, add the dependency and the `opts`
+    function to it. As a dependency, diffbase loads whenever neo-tree does,
+    so `cmd = "DiffBase"` only defers loading without this integration.
+
+    Wiring it by hand: register `component` as "diffbase" in the
+    `components` of each source, and add `{ "diffbase", zindex = 10 }` to
+    the "container" of both `renderers.file` and `renderers.directory`
+    (the directory entry shows the totals of directories).
+component({config}, {node}, {state})            *diffbase-neotree-component*
+    The renderer component. Returns the chunks for a node, or {}.
+
+set_base({root}, {base})                          *diffbase-neotree-set_base*
+    Set neo-tree's git base for {root}, or undo it when {base} is nil.
+    It writes `git_base_by_worktree` and the legacy `git_base`; undoing
+    puts back the values from before the first write. Does nothing on a
+    neo-tree older than 3.42.0 (6679b93). Returns whether anything changed.
+
+refresh({full})                                    *diffbase-neotree-refresh*
+    Refresh the filesystem and git_status sources when {full} is true,
+    otherwise redraw them. The buffers and document_symbols sources are
+    always redrawn so their counts follow too (a redraw never loads
+    neo-tree).
+
+By default diffbase only redraws neo-tree; its own git markers keep
+showing changes against HEAD. With `neotree = { git_base = true }`, diffbase
+sets neo-tree's git base when you turn it on. When you turn it off, it puts
+back what was there before (for example a base from
+`:Neotree git_base=main`), or removes the entry. A neo-tree window opened
+later also gets the base.
+
+                                                    *diffbase-neotree-markers*
+Known issue in neo-tree (only with `git_base = true`): on current builds
+(tested at ffdf8d9), setting or clearing a git base on a tree that is
+already open empties neo-tree's git status. The M, ?, ✗ markers disappear,
+the Git tab says "working tree clean", and after `:DiffBase off` the
+markers stay blank until the output of `git status` changes. A plain
+`:Neotree show` followed by `:Neotree show git_base=HEAD~1` does the same
+without diffbase: when the `git status` output is unchanged, neo-tree's
+cached path passes an empty status table on. diffbase cannot work around
+it. This is why `git_base` is off by default: diffbase then leaves
+neo-tree's git base alone and the counts keep working.
+
+==============================================================================
+11. STATUSLINE                                           *diffbase-statusline*
+
+lualine (add it to your existing `lualine_x`, next to its defaults): >lua
+    {
+      function() return require("diffbase").status() end,
+      cond = function()
+        return package.loaded["diffbase"] ~= nil
+          and require("diffbase").status() ~= ""
+      end,
+    }
+<
+Plain 'statusline': >vim
+    set statusline+=%{v:lua.require('diffbase').status()}
+<
+==============================================================================
+12. FAQ                                                         *diffbase-faq*
+
+How is this different from diffview.nvim? ~
+    diffview.nvim opens a dedicated tab with diff windows and a file panel.
+    diffbase leaves your layout alone and draws the diff on the buffers you
+    are already editing. You can use both.
+
+How is this different from gitsigns' change_base alone? ~
+    diffbase uses change_base for the line highlights and adds:
+    - merge-base presets with default-branch detection,
+    - linehl, numhl, word_diff and show_deleted turned on together and
+      restored afterwards,
+    - a palette that is applied and later restored,
+    - neo-tree counts, and optionally neo-tree's markers on the same base
+      (see |diffbase-neotree-markers|),
+    - untracked files counted and highlighted,
+    - a new-file highlight that works without gitsigns,
+    - commit view,
+    - a statusline string and the |DiffBaseChanged| event.
+
+neo-tree errors with "attempt to index local 'git_status'" ~
+    Only with `neotree = { git_base = true }`. Your neo-tree is older than
+    3.42.0 (6679b93). Update it, or keep the default `git_base = false`.
+    A plain `:Neotree git_base=HEAD~1` shows the same error without
+    diffbase.
+    diffbase recognizes these builds and does not set the base on them;
+    `:checkhealth diffbase` warns about it.
+
+"no upstream branch is configured for '{branch}'" ~
+    The unpushed base needs an upstream: `git push -u` or
+    `git branch --set-upstream-to`. Related messages:
+    - "the upstream branch '{remote}/{branch}' of '{branch}' is gone
+      (deleted on the remote)": push again with `git push -u`, or set
+      another upstream.
+    - "HEAD is detached; 'unpushed' needs a branch with an upstream":
+      switch to a branch first.
+
+The main base picked the wrong branch ~
+    Set |diffbase-config-default_branch|, or run
+    `git remote set-head origin --auto`.
+
+Does it change my repository? ~
+    Only commit view does, through `git switch`. Every other git call is
+    read-only, and the stats computation runs with GIT_OPTIONAL_LOCKS=0.
+
+Health check ~
+    Run `:checkhealth diffbase`. The repository is taken from the active
+    state, else the buffer you ran it from, else the current directory.
+    With lazy-loading (`cmd = "DiffBase"`, and without the neo-tree
+    integration, which loads diffbase with neo-tree), lazy.nvim exposes the
+    health check only after the plugin has loaded ("No healthcheck found"
+    until then): run `:DiffBase off` (a no-op when off) or
+    `:Lazy load diffbase.nvim` first, or load it eagerly (`lazy = false`;
+    the startup script only defines the command).
+
+==============================================================================
+13. KNOWN LIMITATIONS                                   *diffbase-limitations*
+
+Buffer-local gitsigns base ~
+    A base set for one buffer with `:Gitsigns change_base` (without global)
+    is reset by `:DiffBase off`. diffbase restores only the global base.
+
+Files absent from the base ~
+    A file that does not exist in the base (e.g. one added in the viewed
+    commit) may show a stale gitsigns hunk until the buffer is reloaded
+    (`:edit`). diffbase's own new-file highlight is correct.
+
+Colorscheme and diffbase in one command line ~
+    After `:colorscheme X | DiffBase off` (or `| DiffBase {base}`), turning
+    off restores the previous scheme's GitSigns* definitions. Run them as
+    separate commands.
+
+Quitting in commit view ~
+    diffbase does not switch back when Neovim quits. Run `git switch -` to
+    return.
+
+`:DiffBase` outside a git repository ~
+    The base menu still opens; the "not inside a git repository" warning
+    appears only after you choose an entry. `:DiffBase main` and the other
+    subcommands warn right away.
+
+==============================================================================
+ vim:tw=78:ts=8:ft=help:norl:

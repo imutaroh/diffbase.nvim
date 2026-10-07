@@ -8,9 +8,9 @@ You get no diff tab and no new layout. You keep editing the same buffers in the 
 
 [日本語版 README](README.ja.md)
 
-<!-- screenshot: editing view with diffbase on (green/red line backgrounds, word diff, deleted lines) -->
-<!-- screenshot: neo-tree with "+12 -3" counts next to files and directories -->
-<!-- screenshot: the :DiffBase picker menu -->
+![The editing view with diffbase on: changed lines in green and red, changed words and deleted lines, and +added -removed counts in neo-tree](assets/hero.png)
+
+![neo-tree with +added -removed counts next to files and per-directory totals](assets/neotree.png)
 
 ## Features
 

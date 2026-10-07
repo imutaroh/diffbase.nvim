@@ -9,9 +9,11 @@
 
 [English README](README.md)
 
-<!-- screenshot: editing view with diffbase on (green/red line backgrounds, word diff, deleted lines) -->
-<!-- screenshot: neo-tree with "+12 -3" counts next to files and directories -->
-<!-- screenshot: the :DiffBase picker menu -->
+![diffbase を ON にした編集画面。変わった行が緑と赤、変わった単語と消えた行、neo-tree に +追加 -削除](assets/hero.png)
+
+![neo-tree のファイル名の横に +追加 -削除、ディレクトリには配下の合計](assets/neotree.png)
+
+![比べる相手を選ぶメニュー（表示名は設定で日本語にしたもの）](assets/menu-ja.png)
 
 ## 機能
 

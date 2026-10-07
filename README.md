@@ -1,69 +1,71 @@
 # diffbase.nvim
 
-Choose what to diff against (your default branch, the previous commit, unpushed work, or any single
-commit), and your **normal editing view** turns into a GitHub-style PR diff: green and red line backgrounds,
-word diff, deleted lines, and `+added -removed` counts next to every file in neo-tree.
+「何と比べた差分を見るか」を選ぶと、**いつもの編集画面**がそのまま GitHub の PR 差分のような表示になります。
+変わった行の背景が緑と赤になり、行の中で変わった単語と消えた行も見えます。neo-tree では全ファイルの横に
+`+追加 -削除` の行数が出ます。比べる相手は、デフォルトブランチ・直前のコミット・未 push の変更・任意の
+1 コミットから選べます。
 
-You get no diff tab and no new layout. You keep editing the same buffers in the same windows.
+差分用のタブも新しいレイアウトも開きません。同じウィンドウで同じバッファを編集し続けられます。
 
-[日本語版 README](README.ja.md)
+[English README](README.en.md)
 
-![The editing view with diffbase on: changed lines in green and red, changed words and deleted lines, and +added -removed counts in neo-tree](assets/hero.png)
+![diffbase を ON にした編集画面。変わった行が緑と赤、変わった単語と消えた行、neo-tree に +追加 -削除](assets/hero.png)
 
-![neo-tree with +added -removed counts next to files and per-directory totals](assets/neotree.png)
+![neo-tree のファイル名の横に +追加 -削除、ディレクトリには配下の合計](assets/neotree.png)
 
-## Features
+![比べる相手を選ぶメニュー（表示名は設定で日本語にしたもの）](assets/menu-ja.png)
 
-- **Pick a base from a menu** (`:DiffBase`):
-  - **main**: everything changed on this branch. It diffs against the merge-base with the default branch,
-    which is detected automatically.
-  - **previous**: the last commit (`HEAD~1`).
-  - **unpushed**: work that is not pushed yet (merge-base with `@{upstream}`).
-  - **Pick a commit…** (opt-in, `commit_view = true`): shows only what one commit changed (see
-    [Commit view](#commit-view)).
-  - **Off** (shown while a base is set).
-  - Any other ref through `:DiffBase ref <ref>` or `require("diffbase").set(ref)`.
-- **gitsigns.nvim** (optional) is pointed at the same base. While diffbase is on, it turns on line
-  highlights, number highlights, word diff and deleted lines. Turning diffbase off restores the toggles and
-  the global base you had before (see [Known limitations](#known-limitations)).
-- **neo-tree.nvim** (optional):
-  - Shows `+added -removed` next to every changed file. Directories show the total of everything under
-    them, and binary files show `bin`.
-  - Optionally (`neotree = { git_base = true }`), its own git markers (M/A) use the same base. This is off
-    by default because of neo-tree bugs (see [Known issue](#neo-tree-git-markers-go-blank)).
-- **New files are fully green**, including untracked files that were never `git add`ed. This works without
-  gitsigns.
-- **Untracked files are counted** as added lines. Submodules are not counted: their changes are not lines
-  of this repository.
-- **Statusline string** such as `Δ main +120 -34`.
-- **GitHub-like palette**, with dark and light variants chosen from `'background'`. diffbase saves your
-  highlight groups when it turns on and restores them when it turns off.
-- **Async and debounced.** Stats are computed with `vim.system` and never block editing. Results that
-  arrive after the base has changed are dropped.
-- **No default keymaps.**
+## 機能
 
-## Requirements
+- **メニューから比較の基準を選ぶ**（`:DiffBase`）
+  - **main**：このブランチでの変更すべて。自動検出したデフォルトブランチとの merge-base と比べます。
+  - **previous**：直前のコミット（`HEAD~1`）。
+  - **unpushed**：まだ push していない変更（`@{upstream}` との merge-base）。
+  - **Pick a commit…**（任意で有効化、`commit_view = true`）：1 つのコミットが変えた内容だけを見ます
+    （[コミット表示](#コミット表示)を参照）。
+  - **Off**（基準を設定しているときだけ出ます）
+  - それ以外の ref は `:DiffBase ref <ref>` か `require("diffbase").set(ref)` で指定できます。
+- **gitsigns.nvim**（任意）も同じ基準に合わせます。ON の間は行の背景・行番号・単語差分・削除行の表示を
+  有効にします。OFF にすると、ON にする前の表示設定とグローバルな基準に戻します
+  （[既知の制限](#既知の制限)を参照）。
+- **neo-tree.nvim**（任意）
+  - 変更のあるファイルの横に `+追加 -削除` を表示します。ディレクトリには配下の合計を、バイナリファイルには
+    `bin` を表示します。
+  - `neotree = { git_base = true }` にすると、neo-tree 自身の git マーク（M/A）も同じ基準になります。neo-tree
+    側の不具合があるため既定では OFF です（[neo-tree の git マークが消える](#neo-tree-の-git-マークが消える)を参照）。
+- **新規ファイルは全行が緑**になります。一度も `git add` していない未追跡ファイルも含みます。gitsigns が
+  なくても動きます。
+- **未追跡ファイルも行数に数えます**（追加行として）。サブモジュールは数えません（その中の変更は、この
+  リポジトリの行ではないため）。
+- **ステータスライン用の文字列**（例：`Δ main +120 -34`）を返します。
+- **GitHub 風の配色**。`'background'` に応じてダーク版とライト版を切り替えます。ON にしたときにハイライト
+  グループを保存し、OFF で元に戻します。
+- **非同期でデバウンスつき**。行数の集計は `vim.system` で行うので編集を止めません。基準を切り替えた後に
+  届いた古い結果は捨てます。
+- **デフォルトのキーマップはありません。**
 
-- Neovim >= 0.10
-- git >= 2.24 (`:checkhealth diffbase` checks it)
-- A Unix-like OS (macOS, Linux). diffbase passes `/dev/null` to git, so Windows is not supported.
-- Optional: [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim) (v1 or v2) for line and word
-  highlights. diffbase waits for gitsigns' completion callback of each base change (gitsigns v0.8 and
-  newer call it).
-- Optional: [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim) for counts in the file tree.
-  The counts work with any build. If you opt in to `neotree = { git_base = true }`, **use neo-tree 3.42.0
-  or newer**: its first release with commit `6679b93` (2026-08-05, PR #2072, "use correct argument order
-  for git_base callback").
-  Older builds fail with `attempt to index local 'git_status' (a boolean value)` on every render whenever
-  any git base is set, including a plain `:Neotree git_base=HEAD~1` without diffbase. diffbase detects
-  such a build and then does not set neo-tree's git base (it warns once, and `:checkhealth diffbase` shows
-  a warning). Current builds have another problem with a git base set on an open tree; see
-  [neo-tree git markers go blank](#neo-tree-git-markers-go-blank).
+## 必要なもの
 
-Without gitsigns or neo-tree, diffbase still provides the new-file highlight, the stats API, the
-statusline string and the commands.
+- Neovim 0.10 以上
+- git 2.24 以上（`:checkhealth diffbase` で確認します）
+- Unix 系の OS（macOS、Linux）。git に `/dev/null` を渡しているため、Windows は対象外です。
+- 任意：[gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)（v1 / v2）。行と単語のハイライトに使います。
+  diffbase は基準を切り替えるたびに gitsigns の完了コールバックを待ちます（gitsigns v0.8 以降が呼びます）。
+- 任意：[neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim)。ファイルツリーへの行数表示に使います。
+  行数表示はどの版でも動きます。`neotree = { git_base = true }` にする場合は、**neo-tree 3.42.0 以降を
+  使ってください。** コミット `6679b93`（2026-08-05、PR #2072 "use correct argument order for git_base
+  callback"）を含む最初のリリースです。
+  それより古い版は、git の基準を設定すると描画のたびに
+  `attempt to index local 'git_status' (a boolean value)` というエラーを出します。diffbase を使わない
+  `:Neotree git_base=HEAD~1` でも同じエラーになります。diffbase はこの古い版を見分けて、その場合は
+  neo-tree の git の基準を設定しません（一度だけ警告し、`:checkhealth diffbase` でも警告します）。
+  現在の版にも、開いているツリーに git の基準を設定したときの別の問題が
+  あります。[neo-tree の git マークが消える](#neo-tree-の-git-マークが消える)を参照してください。
 
-## Installation
+gitsigns も neo-tree もなくても、新規ファイルのハイライト・行数の API・ステータスライン用の文字列・
+コマンドは使えます。
+
+## インストール
 
 ### lazy.nvim
 
@@ -78,7 +80,7 @@ statusline string and the commands.
 }
 ```
 
-### vim.pack (Neovim 0.12+)
+### vim.pack（Neovim 0.12 以上）
 
 ```lua
 vim.pack.add({ "https://github.com/imutaroh/diffbase.nvim" })
@@ -86,12 +88,12 @@ require("diffbase").setup()
 vim.keymap.set("n", "<leader>gn", function() require("diffbase").pick() end, { desc = "Diff against… (diffbase)" })
 ```
 
-You can skip `setup()`. diffbase uses the defaults on first use.
+`setup()` は省略できます。その場合は最初に使ったときに既定値で初期化します。
 
-See `:help diffbase` for the full reference. lazy.nvim and `vim.pack` generate the help tags for plugins
-they clone. For a local checkout (lazy.nvim `dir =` or `dev = true`), run `:helptags ALL` once.
+詳しいリファレンスは `:help diffbase` にあります。lazy.nvim と `vim.pack` は、clone したプラグインのヘルプタグを
+作ります。ローカルのチェックアウト（lazy.nvim の `dir =` や `dev = true`）では、一度 `:helptags ALL` を実行してください。
 
-## Recommended setup
+## おすすめの設定
 
 ```lua
 -- lazy.nvim
@@ -121,28 +123,28 @@ return {
 }
 ```
 
-If you already have a neo-tree spec, add `"imutaroh/diffbase.nvim"` to its `dependencies` and call
-`setup_opts()` from its `opts` instead (lazy.nvim merges both specs either way). As a dependency, diffbase
-loads whenever neo-tree does (at startup, unless you lazy-load neo-tree), so `cmd = "DiffBase"` only defers
-loading when you skip the neo-tree integration.
+すでに neo-tree の spec があるなら、その `dependencies` に `"imutaroh/diffbase.nvim"` を足し、`opts` から
+`setup_opts()` を呼んでください（どちらの書き方でも lazy.nvim が spec をまとめます）。依存として指定すると
+diffbase は neo-tree と一緒に読み込まれる（neo-tree を遅延読み込みしていなければ起動時）ため、
+`cmd = "DiffBase"` で読み込みが遅れるのは neo-tree 連携を使わない場合だけです。
 
-gitsigns' hunk navigation (`require("gitsigns").nav_hunk("next")`) follows the base diffbase set, so you
-can jump through the changes of the whole branch.
+gitsigns のハンク移動（`require("gitsigns").nav_hunk("next")`）も diffbase が設定した基準に従うので、
+ブランチ全体の変更箇所を順に移動できます。
 
-### neo-tree wiring
+### neo-tree との連携
 
-`setup_opts(opts)` patches neo-tree's setup options. You can call it more than once with the same result.
+`setup_opts(opts)` は neo-tree の setup オプションに手を加えます。何回呼んでも結果は同じです。
 
-- It registers a `diffbase` component for every built-in source (`filesystem`, `buffers`, `git_status`,
-  `document_symbols`) and for each plain source name in `opts.sources`. The `file` and `directory`
-  renderers it patches are shared by these sources, and neo-tree shows "Component diffbase not found."
-  in a source that renders them without the component.
-- It inserts `{ "diffbase", zindex = 10 }` right after `name` inside the `container` of the `file` and
-  `directory` renderers.
-- If you have not configured `renderers.file` or `renderers.directory`, it copies neo-tree's defaults
-  first. If you have configured them, it patches yours, including source-specific renderers.
+- 組み込みの全ソース（`filesystem`・`buffers`・`git_status`・`document_symbols`）と、`opts.sources` に
+  書かれた（モジュールパスでない）ソース名に `diffbase` コンポーネントを登録します。手を加える `file` /
+  `directory` レンダラーはこれらのソースで共有されるため、コンポーネントがないソースでは各行に
+  "Component diffbase not found." と出てしまいます。
+- `file` と `directory` のレンダラーの `container` の中で、`name` の直後に `{ "diffbase", zindex = 10 }`
+  を挿入します。
+- `renderers.file` や `renderers.directory` を自分で設定していなければ、先に neo-tree の既定値を
+  コピーします。設定していれば、ソースごとのレンダラーも含めてそちらに挿入します。
 
-If you prefer to wire it by hand:
+手で組み込む場合は次のようにします。
 
 ```lua
 local diffbase_tree = require("diffbase.integrations.neotree")
@@ -173,21 +175,21 @@ require("neo-tree").setup({
 })
 ```
 
-By default diffbase only redraws neo-tree so the counts follow every change; neo-tree's own git markers
-keep showing changes against `HEAD`. With `neotree = { git_base = true }`, diffbase also sets neo-tree's
-git base (`git_base_by_worktree`, and the legacy `git_base`) and refreshes its git status, so that
-neo-tree's M/A markers match. When diffbase turns off, it puts back whatever was there before (for example
-a base you set with `:Neotree git_base=main`), or removes the entry if there was none. A neo-tree window
-opened after you turned diffbase on also gets the base.
+既定では、diffbase は行数が変化に追従するよう neo-tree を再描画するだけです。neo-tree 自身の git マークは
+`HEAD` との差分を表示したままです。`neotree = { git_base = true }` にすると、neo-tree の git の基準
+（`git_base_by_worktree` と、旧版向けの `git_base`）も設定して git の状態を読み直させるので、neo-tree の
+M/A マークも同じ基準になります。diffbase を OFF にすると、ON にする前の値（たとえば
+`:Neotree git_base=main` で自分で設定した基準）に戻します。元の値がなければ設定を消します。diffbase を
+ON にした後で開いた neo-tree にも基準を設定します。
 
-**Known issue in neo-tree (only with `git_base = true`):** on current neo-tree builds, setting or clearing
-the git base of a tree that is already open blanks neo-tree's git markers (M, ?, ✗) until the output of
-`git status` changes. See [neo-tree git markers go blank](#neo-tree-git-markers-go-blank). This is why
-`git_base` is off by default.
+**neo-tree 側の既知の問題（`git_base = true` のときだけ）：** 現在の neo-tree では、すでに開いているツリーの
+git の基準を設定・解除すると、`git status` の出力が変わるまで neo-tree の git マーク（M、?、✗）が消えます。
+詳しくは [neo-tree の git マークが消える](#neo-tree-の-git-マークが消える)を参照してください。
+`git_base` が既定で OFF なのはこのためです。
 
-### Statusline (lualine)
+### ステータスライン（lualine）
 
-Add the component to your existing `lualine_x` (this example keeps lualine's defaults after it):
+既存の `lualine_x` にコンポーネントを足してください（この例では後ろに lualine の既定の項目を残しています）。
 
 ```lua
 require("lualine").setup({
@@ -205,70 +207,69 @@ require("lualine").setup({
 })
 ```
 
-`status()` returns:
+`status()` の戻り値は次のとおりです。
 
-| State | Example |
+| 状態 | 例 |
 | --- | --- |
-| off | `""` |
-| a base is set | `Δ main +120 -34`, `Δ previous +5 -2`, `Δ HEAD~2 +6 -2` |
-| a ref that has the name of a base | `Δ ref:main +5 -1` (`:DiffBase ref main`: the branch tip, not the `main` base's merge-base) |
-| commit view | `Δ commit 9cce4ec +5 -1` |
-| off, but still in commit view | `Δ detached (from feature)` |
+| OFF | `""` |
+| 基準を設定中 | `Δ main +120 -34`、`Δ previous +5 -2`、`Δ HEAD~2 +6 -2` |
+| 基準と同じ名前の ref を設定中 | `Δ ref:main +5 -1`（`:DiffBase ref main`。`main` 基準の merge-base ではなく、ブランチの先端と比べています） |
+| コミット表示中 | `Δ commit 9cce4ec +5 -1` |
+| OFF だがコミット表示から戻っていない | `Δ detached (from feature)` |
 
-The counts appear once the first async computation finishes.
+行数は、最初の非同期の集計が終わってから表示されます。
 
-## Commands
+## コマンド
 
-| Command | Action |
+| コマンド | 動作 |
 | --- | --- |
-| `:DiffBase` / `:DiffBase pick` | Open the menu |
-| `:DiffBase main` | Diff against the merge-base with the default branch |
-| `:DiffBase previous` | Diff against `HEAD~1` |
-| `:DiffBase unpushed` | Diff against the merge-base with `@{upstream}` |
-| `:DiffBase <name>` | Any base defined in `bases` |
-| `:DiffBase ref <ref>` | Diff against any git ref (completes `HEAD`, branches, remote branches, tags) |
-| `:DiffBase commit` | Pick a commit and view only its changes (detaches HEAD; needs `commit_view = true`) |
-| `:DiffBase back` | Leave commit view, return to your branch, and turn off |
-| `:DiffBase off` | Turn off (does **not** leave commit view) |
-| `:DiffBase refresh` | Recompute the stats (debounced) |
+| `:DiffBase` / `:DiffBase pick` | メニューを開く |
+| `:DiffBase main` | デフォルトブランチとの merge-base と比べる |
+| `:DiffBase previous` | `HEAD~1` と比べる |
+| `:DiffBase unpushed` | `@{upstream}` との merge-base と比べる |
+| `:DiffBase <name>` | `bases` に定義した任意の基準 |
+| `:DiffBase ref <ref>` | 任意の git ref と比べる（`HEAD`、ブランチ、リモートブランチ、タグを補完） |
+| `:DiffBase commit` | コミットを選んで、その変更だけを見る（HEAD を detach する。`commit_view = true` が必要） |
+| `:DiffBase back` | コミット表示を抜けて元のブランチに戻り、OFF にする |
+| `:DiffBase off` | OFF にする（コミット表示からは**抜けない**） |
+| `:DiffBase refresh` | 行数を再計算する（デバウンスつき） |
 
-The subcommands `pick`, `commit`, `back`, `off`, `refresh` and `ref` are checked first, so a base with one
-of those names cannot be reached as `:DiffBase <name>`.
+サブコマンド `pick`・`commit`・`back`・`off`・`refresh`・`ref` が先に判定されます。そのため、これらと同じ
+名前の基準は `:DiffBase <name>` では呼べません。
 
-### Commit view
+### コミット表示
 
-Commit view is opt-in because it changes your checkout. Enable it with:
+コミット表示はチェックアウトを切り替えるため、既定では無効です。次のように有効にします。
 
 ```lua
 require("diffbase").setup({ commit_view = true })
 ```
 
-This adds **Pick a commit…** to the menu and enables `:DiffBase commit` (while it is off, that command only
-warns how to enable it). Picking a commit switches the repository to it with `git switch --detach` and
-diffs against its parent. A root commit is diffed against the empty tree.
+有効にすると、メニューに **Pick a commit…** が加わり、`:DiffBase commit` が使えるようになります（無効の間、
+このコマンドは有効にする方法を警告するだけです）。コミットを選ぶと `git switch --detach` でリポジトリを
+そのコミットに切り替え、親コミットと比べます。最初のコミット（親がないコミット）は空のツリーと比べます。
 
-- **Which commits are listed:** the commits in `<default branch>..HEAD`. When that range is empty, the
-  last `commit_list_limit` commits of `HEAD` are listed instead.
-- **When it refuses:** if tracked files have uncommitted changes (staged or not), or a buffer of a file in
-  the repository has unsaved changes, it refuses. Untracked files do not block it. While one repository is
-  in commit view, neither commit view nor any other base can start in another one; run `:DiffBase back`
-  first. Submodules are
-  ignored for this check: `git switch` does not update submodule checkouts, so a submodule whose checkout
-  no longer matches the viewed commit does not count as a change.
-- **What is counted:** only what the commit changed. Untracked files in the working tree are not counted
-  or highlighted as new while in commit view (whatever `include_untracked` says).
-- **Picking again:** while in commit view, the list is built from the branch you will return to, not from
-  the detached HEAD, so you can hop between commits of the branch.
-- **Going back:** `:DiffBase back` (or the "Back to …" entry at the top of the menu) switches back to the
-  branch, or the commit, you came from. It refuses while tracked files were changed or a buffer of the
-  repository has unsaved changes.
-- **Switching outside Neovim:** if HEAD is no longer detached at the viewed commit (for example after
-  `git switch` in a terminal), diffbase considers commit view over: `back` and the next commit view never
-  switch you away from where you are now. `back` then only warns and turns off.
-- **Off while detached:** `:DiffBase off` turns the highlights off but leaves HEAD detached. The statusline
-  then shows `Δ detached (from <branch>)`.
-- **Quitting while detached:** diffbase does nothing when Neovim quits. If you quit Neovim while viewing a
-  commit, run `git switch -` to return (or `git switch <branch>` if you hopped between several commits).
+- **一覧に出るコミット**：`<デフォルトブランチ>..HEAD` のコミットです。この範囲が空のときは、`HEAD` から
+  直近 `commit_list_limit` 件を出します。
+- **切り替えを断る条件**：追跡中のファイルに未コミットの変更（ステージ済みかどうかを問わず）があるとき、
+  またはリポジトリ内のファイルのバッファに未保存の変更があるときは、切り替えません。未追跡ファイルは
+  妨げになりません。あるリポジトリでコミット表示をしている間は、別のリポジトリではコミット表示もほかの
+  基準も始められません。先に `:DiffBase back` を実行してください。サブモジュールはこの判定から外します。`git switch` は
+  サブモジュールのチェックアウトを更新しないため、表示中のコミットとずれていても変更とはみなしません。
+- **数える対象**：そのコミットが変えた内容だけです。コミット表示中は、作業ツリーの未追跡ファイルを数えず、
+  新規ファイルとしてもハイライトしません（`include_untracked` の設定によらず）。
+- **選び直し**：コミット表示中にもう一度選ぶと、detach した HEAD ではなく戻り先のブランチから一覧を
+  作ります。ブランチのコミットを行き来できます。
+- **戻り方**：`:DiffBase back`（またはメニューの先頭に出る "Back to …"）で、元のブランチ（またはコミット）に
+  戻ります。追跡中のファイルが変更されているときや、リポジトリ内のバッファに未保存の変更があるときは
+  戻りません。
+- **Neovim の外での切り替え**：HEAD が表示中のコミットで detach された状態でなくなったら（ターミナルで
+  `git switch` した場合など）、コミット表示は終わったものとみなします。`back` と次のコミット表示が、
+  今いる場所から別の場所へ切り替えることはありません。このとき `back` は警告して OFF にするだけです。
+- **detach 中の OFF**：`:DiffBase off` はハイライトを消しますが、HEAD は detach したままです。ステータス
+  ラインには `Δ detached (from <branch>)` と出ます。
+- **detach したままの終了**：Neovim の終了時、diffbase は何もしません。コミット表示のまま Neovim を
+  終了したら、`git switch -` で戻ってください（複数のコミットを行き来した場合は `git switch <branch>`）。
 
 ## API
 
@@ -289,38 +290,36 @@ diffbase.status()              -- -> string
 ```
 
 - **`set(ref, opts?)`**
-  - `ref` is a git ref string, or `function(ctx) return ref end` where `ctx = { root, default_branch }`.
-    The special ref `"@default"` means the detected default branch.
-  - `opts.merge_base` (boolean) diffs against `git merge-base <ref> HEAD` instead of `ref` itself.
-  - `opts.label` is the menu and notification text, and `opts.name` is the short name for `status()`.
-    Both default to the ref. `"@default"` and a function ref default to the ref they resolve to (for
-    example `origin/main`). A ref with the same name as a configured base defaults to `ref:<ref>`, so it
-    is not mistaken for that base in the statusline or the menu.
-  - Returns `false`, with a warning, if the ref cannot be resolved, or while another repository is in
-    commit view.
-  - The ref is resolved to a commit once, when you set it. Later refreshes recompute the stats but keep
-    that commit.
+  - `ref` は git の ref 文字列か、`ref` を返す関数 `function(ctx)` です。`ctx` は `{ root, default_branch }`。
+    特別な ref `"@default"` は検出したデフォルトブランチを指します。
+  - `opts.merge_base`（boolean）を true にすると、`ref` そのものではなく `git merge-base <ref> HEAD` と比べます。
+  - `opts.label` はメニューと通知の文言、`opts.name` は `status()` に出る短い名前です。どちらも省略すると
+    ref になります。`"@default"` と関数の ref は、解決した先の ref（例：`origin/main`）になります。設定した
+    基準と同じ名前の ref は `ref:<ref>` になり、ステータスラインやメニューでその基準と取り違えません。
+  - ref を解決できないとき、または別のリポジトリがコミット表示中のときは、警告を出して `false` を返します。
+  - ref は設定した時点で一度だけコミットに解決します。その後の再計算では行数だけを数え直し、比べる
+    コミットは変えません。
 - **`get()`**
-  - `base` is the commit diffed against. For a root commit in commit view it is the empty tree.
-  - `root` is the normalized repository root.
-  - `detached_from` is the branch (or commit) to return to while in commit view.
+  - `base` は比べているコミットです。最初のコミットをコミット表示しているときは空のツリーになります。
+  - `root` は正規化したリポジトリのルートです。
+  - `detached_from` は、コミット表示中に戻る先のブランチ（またはコミット）です。
 - **`stats(path?)`**
-  - `path` defaults to the current buffer.
-  - Directories return the total of everything under them. For directories, `binary` and `new` are
-    always `false`.
-  - Returns `nil` when diffbase is off or the path has no changes.
-  - Paths are resolved with realpath, so symlinked checkouts work. A symlink that git tracks reports its
-    own stats (as git sees it); a symlink from outside the repository into it reports its target's.
-- **`_open_commit(root, sha, text?)`** opens commit view for `sha` without the picker. It is exposed for
-  custom pickers and tests, and is not covered by API stability.
+  - `path` を省略すると現在のバッファを対象にします。
+  - ディレクトリを渡すと配下の合計を返します。ディレクトリの `binary` と `new` は常に `false` です。
+  - OFF のとき、または変更のないパスでは `nil` を返します。
+  - パスは realpath で解決するので、シンボリックリンク経由で開いたリポジトリでも動きます。git が追跡して
+    いるシンボリックリンクは（git と同じく）リンク自身の行数を返し、リポジトリの外からリポジトリ内を指す
+    リンクはリンク先の行数を返します。
+- **`_open_commit(root, sha, text?)`** は、ピッカーを通さずに `sha` のコミット表示を開きます。独自の
+  ピッカーやテスト向けに公開しているもので、互換性は保証しません。
 
-### Events
+### イベント
 
-diffbase fires the `User` autocmd `DiffBaseChanged` with `data = require("diffbase").get()`:
+diffbase は `User` の autocmd `DiffBaseChanged` を発火します。`data` は `require("diffbase").get()` です。
 
-- after each stats computation finishes (state is already updated at that point),
-- after `off()`,
-- after `back()`.
+- 行数の集計が終わるたび（この時点で状態は更新済み）
+- `off()` の後
+- `back()` の後
 
 ```lua
 vim.api.nvim_create_autocmd("User", {
@@ -332,7 +331,7 @@ vim.api.nvim_create_autocmd("User", {
 })
 ```
 
-### neo-tree integration module
+### neo-tree 連携モジュール
 
 ```lua
 local t = require("diffbase.integrations.neotree")
@@ -342,9 +341,9 @@ t.set_base(root, base)   -- -> changed; base = nil restores the previous values
 t.refresh(full)          -- full = re-read git status, else redraw
 ```
 
-## Configuration
+## 設定
 
-These are the defaults (from `lua/diffbase/config.lua`):
+既定値は次のとおりです（`lua/diffbase/config.lua` から転記）。
 
 ```lua
 require("diffbase").setup({
@@ -385,36 +384,36 @@ require("diffbase").setup({
 })
 ```
 
-How options are merged and checked:
+オプションの合成と検証のしかた：
 
-- Tables are deep-merged with the defaults, so `colors = { dark = { new_line = "#123456" } }` changes one
-  color only.
-- `bases` and `refresh_events` are lists. If you set them, they **replace** the defaults; they are not
-  merged.
-- `colors = false` leaves all highlight groups alone.
-- If any option has the wrong type (palette colors included: each must be a string or a number), or
-  `commit_list_limit` is not a positive integer, or `debounce_ms` not an integer >= 0, diffbase shows one
-  warning that lists every problem, and uses **all** defaults.
-- A color string that Neovim does not accept (for example a misspelled color name) produces one warning;
-  the affected groups are left as they are and everything else still works.
-- Unknown keys (top level, and inside `gitsigns` / `neotree`) produce one warning, shown once per session.
+- テーブルは既定値に深くマージします。たとえば `colors = { dark = { new_line = "#123456" } }` なら、
+  その 1 色だけが変わります。
+- `bases` と `refresh_events` はリストなので、指定すると既定値を**置き換えます**（マージしません）。
+- `colors = false` にすると、ハイライトグループには一切触れません。
+- 型の合わないオプションが 1 つでもあると（配色の各色も対象で、文字列か数値である必要があります）、
+  または `commit_list_limit` が正の整数でない、`debounce_ms` が 0 以上の整数でないと、
+  問題をすべて並べた警告を 1 回出し、**全オプションを**既定値に戻します。
+- Neovim が受け付けない色の文字列（色名の綴り間違いなど）は警告を 1 回出し、その色のグループだけ変えずに
+  残します。ほかの機能はそのまま動きます。
+- 未知のキー（トップレベルと、`gitsigns` / `neotree` の中）があると警告を出します。警告はセッション中
+  1 回だけです。
 
-What each option does:
+各オプションの意味：
 
-| Option | Meaning |
+| オプション | 意味 |
 | --- | --- |
-| `default_branch` | Ref used for `"@default"`, for example `"origin/develop"`. |
-| `bases[].name` | Short name, used by `:DiffBase <name>` and `status()`. |
-| `bases[].label` | Menu text. |
-| `bases[].ref` | A ref string, `"@default"`, or `function(ctx)` returning a ref. |
-| `bases[].merge_base` | Diff against the merge-base with `HEAD`. |
-| `commit_view` | Enable [commit view](#commit-view) (`git switch --detach`). Off by default. |
-| `gitsigns.*` | Which gitsigns toggles to turn on. Only the ones set to `true` are saved and restored. |
-| `neotree.git_base` | Also set neo-tree's git base and refresh its git status, so its M/A markers use the same base. Off by default because of neo-tree bugs (see [Known issues](#neo-tree-git-markers-go-blank)). Either way diffbase redraws neo-tree (only if it is already loaded) so the component's counts follow every change. |
-| `stat_format` | Customizes the neo-tree text. Return a string (shown with `NeoTreeDimText`; `""` hides it) or a list of `{ text = ..., highlight = ... }` chunks. |
-| `refresh_events` | Autocmd events that trigger a debounced recompute while on. `{}` disables them. |
+| `default_branch` | `"@default"` が指す ref。例：`"origin/develop"`。 |
+| `bases[].name` | 短い名前。`:DiffBase <name>` と `status()` で使います。 |
+| `bases[].label` | メニューの文言。 |
+| `bases[].ref` | ref 文字列、`"@default"`、または ref を返す `function(ctx)`。 |
+| `bases[].merge_base` | `HEAD` との merge-base と比べます。 |
+| `commit_view` | [コミット表示](#コミット表示)（`git switch --detach`）を有効にする。既定は無効。 |
+| `gitsigns.*` | ON にする gitsigns の設定。`true` にしたものだけを保存して元に戻します。 |
+| `neotree.git_base` | neo-tree の git の基準も設定し、git の状態を読み直させて M/A マークを同じ基準にするかどうか。neo-tree 側の不具合があるため既定は `false` です（[既知の問題](#neo-tree-の-git-マークが消える)を参照）。どちらの場合も、コンポーネントの行数が変化に追従するよう neo-tree の再描画はします（neo-tree が読み込み済みのときだけ）。 |
+| `stat_format` | neo-tree に出す文字列を変えます。文字列（`NeoTreeDimText` で表示、`""` なら非表示）か、`{ text = ..., highlight = ... }` のリストを返します。 |
+| `refresh_events` | ON の間、デバウンスつきで再計算を起こすイベント。`{}` で無効になります。 |
 
-Example `stat_format`:
+`stat_format` の例：
 
 ```lua
 stat_format = function(s)
@@ -423,131 +422,126 @@ stat_format = function(s)
 end
 ```
 
-## Highlights
+## ハイライト
 
-| Group | Default | Used for |
+| グループ | 既定 | 用途 |
 | --- | --- | --- |
-| `DiffBaseNewLine` | links to `DiffAdd` | Line background of files absent in the base |
-| `DiffBaseNewNr` | links to `DiffAdd` | Line number of those files |
+| `DiffBaseNewLine` | `DiffAdd` へのリンク | 基準に存在しないファイルの行の背景 |
+| `DiffBaseNewNr` | `DiffAdd` へのリンク | そのファイルの行番号 |
 
-When `colors` is not `false`, diffbase does the following while it is on:
+`colors` が `false` でなければ、diffbase は ON の間に次のことをします。
 
-- It saves the current definitions of the groups below, then paints them with the palette.
-- It paints `DiffBaseNewLine` and `DiffBaseNewNr` too, so the palette overrides your own definition of
-  those groups while it is on.
-- On `ColorScheme`, or when `'background'` changes, it saves the groups again and repaints them (on the
-  next event-loop turn; see [Known limitations](#known-limitations)).
-- When it turns off, it restores the saved definitions exactly. A group that was undefined stays
-  undefined.
+- 下に挙げるグループの現在の定義を保存してから、配色で塗り替えます。
+- `DiffBaseNewLine` と `DiffBaseNewNr` も塗り替えます。そのため ON の間は、自分で定義した色より配色が
+  優先されます。
+- `ColorScheme` や `'background'` の変更があると、保存し直してから塗り直します（次のイベントループで行います。
+  [既知の制限](#既知の制限)を参照）。
+- OFF にすると、保存した定義をそのまま戻します。もともと未定義だったグループは未定義のままにします。
 
-These are the gitsigns groups it paints:
+塗り替える gitsigns のグループは次のとおりです。
 
-- `new_line`: `GitSignsAddLn`, `GitSignsChangeLn`, `GitSignsChangedeleteLn`, `GitSignsUntrackedLn`
-- `new_word`: `GitSignsAddLnInline`, `GitSignsChangeLnInline`, `GitSignsAddInline`, `GitSignsChangeInline`,
-  `GitSignsAddVirtLnInline`, `GitSignsChangeVirtLnInline`
-- `old_line`: `GitSignsDeleteLn`, `GitSignsTopdeleteLn`, `GitSignsDeleteVirtLn`
-- `old_word`: `GitSignsDeleteLnInline`, `GitSignsDeleteInline`, `GitSignsDeleteVirtLnInline`,
+- `new_line`：`GitSignsAddLn`、`GitSignsChangeLn`、`GitSignsChangedeleteLn`、`GitSignsUntrackedLn`
+- `new_word`：`GitSignsAddLnInline`、`GitSignsChangeLnInline`、`GitSignsAddInline`、`GitSignsChangeInline`、
+  `GitSignsAddVirtLnInline`、`GitSignsChangeVirtLnInline`
+- `old_line`：`GitSignsDeleteLn`、`GitSignsTopdeleteLn`、`GitSignsDeleteVirtLn`
+- `old_word`：`GitSignsDeleteLnInline`、`GitSignsDeleteInline`、`GitSignsDeleteVirtLnInline`、
   `GitSignsDeleteVirtLnInLine`
-- `new_fg` (bold): `GitSignsAddNr`, `GitSignsChangeNr`, `GitSignsChangedeleteNr`, `GitSignsUntrackedNr`
-- `old_fg` (bold): `GitSignsDeleteNr`, `GitSignsTopdeleteNr`
+- `new_fg`（太字）：`GitSignsAddNr`、`GitSignsChangeNr`、`GitSignsChangedeleteNr`、`GitSignsUntrackedNr`
+- `old_fg`（太字）：`GitSignsDeleteNr`、`GitSignsTopdeleteNr`
 
-The neo-tree counts use `NeoTreeGitAdded`, `NeoTreeGitDeleted` and `NeoTreeDimText`.
+neo-tree の行数表示には `NeoTreeGitAdded`、`NeoTreeGitDeleted`、`NeoTreeDimText` を使います。
 
-## Health
+## ヘルスチェック
 
-Run `:checkhealth diffbase`. It reports:
+`:checkhealth diffbase` を実行すると、次の内容を表示します。
 
-- the Neovim version, and the git version (an error below 2.24),
-- whether gitsigns and neo-tree are present (with versions when installed through lazy.nvim),
-- the current repository and the detected default branch,
-- the active base, and whether you are still in commit view.
+- Neovim のバージョンと git のバージョン（2.24 未満ならエラー）
+- gitsigns と neo-tree の有無（lazy.nvim で入れている場合はバージョンも）
+- 現在のリポジトリと、検出したデフォルトブランチ
+- 有効な基準と、コミット表示から戻っていないかどうか
 
-The repository is taken from the active diffbase state, else the buffer you ran `:checkhealth` from, else
-the current directory.
+リポジトリは、diffbase が有効ならその状態から、なければ `:checkhealth` を実行したバッファから、それもなければ
+カレントディレクトリから探します。
 
-With lazy-loading (`cmd = "DiffBase"`, and without the neo-tree integration, which loads diffbase with
-neo-tree), lazy.nvim only exposes a plugin's health check after the plugin has loaded, so
-`:checkhealth diffbase` reports "No healthcheck found" until then. Run `:DiffBase off` (a
-no-op when off) or `:Lazy load diffbase.nvim` first. Loading it eagerly (`lazy = false`) is also cheap:
-the startup script only defines the `:DiffBase` command.
+遅延読み込み（`cmd = "DiffBase"`。neo-tree 連携を使うと diffbase は neo-tree と一緒に読み込まれるので、
+それを使わない場合）では、lazy.nvim はプラグインを読み込むまでそのヘルスチェックを見せない
+ため、`:checkhealth diffbase` は読み込み前だと "No healthcheck found" になります。先に `:DiffBase off`
+（OFF のときは何もしません）か `:Lazy load diffbase.nvim` を実行してください。起動時のスクリプトは
+`:DiffBase` コマンドを定義するだけなので、`lazy = false` で最初から読み込んでも負担はほとんどありません。
 
-## Known limitations
+## 既知の制限
 
-- **Buffer-local gitsigns base:** a base set for one buffer with `:Gitsigns change_base` (without
-  `global`) is reset by `:DiffBase off`. diffbase restores only the global base.
-- **Files absent from the base:** a file that does not exist in the base (for example one added in the
-  viewed commit) may show a stale gitsigns hunk until the buffer is reloaded (`:edit`). diffbase's own
-  new-file highlight is correct.
-- **Colorscheme and diffbase in one command line:** after `:colorscheme X | DiffBase off` (or
-  `| DiffBase <base>`), turning off restores the previous scheme's `GitSigns*` definitions. Run them as
-  separate commands.
-- **Quitting in commit view:** diffbase does not switch back when Neovim quits. Run `git switch -` to
-  return.
-- **`:DiffBase` outside a git repository:** the base menu still opens; the "not inside a git repository"
-  warning appears only after you choose an entry. `:DiffBase main` and the other subcommands warn right
-  away.
+- **バッファ単位の gitsigns の基準**：`:Gitsigns change_base` を global なしで実行して 1 つのバッファだけに
+  設定した基準は、`:DiffBase off` でリセットされます。diffbase が戻すのはグローバルな基準だけです。
+- **基準に存在しないファイル**：基準に存在しないファイル（表示中のコミットで追加されたファイルなど）では、
+  バッファを読み直す（`:edit`）まで gitsigns の古い差分が残ることがあります。diffbase 自身の新規ファイルの
+  ハイライトは正しく表示されます。
+- **カラースキームと diffbase を 1 行で実行**：`:colorscheme X | DiffBase off`（または `| DiffBase <base>`）
+  のように 1 行で実行すると、OFF にしたときに前のカラースキームの `GitSigns*` の定義に戻ります。別々の
+  コマンドとして実行してください。
+- **コミット表示中の終了**：Neovim の終了時に diffbase は元へ戻しません。`git switch -` で戻ってください。
+- **git リポジトリの外での `:DiffBase`**：基準のメニューはそのまま開き、「not inside a git repository」の警告は
+  項目を選んだ後に出ます。`:DiffBase main` などのサブコマンドはすぐに警告します。
 
-## FAQ
+## よくある質問
 
-### How is this different from diffview.nvim?
+### diffview.nvim とは何が違う？
 
-diffview.nvim opens a dedicated tab with side-by-side diff windows and a file panel, which is great for
-reviewing. diffbase changes nothing about your layout. You keep editing real buffers, and the diff is drawn
-on top of them as highlights, plus counts in the file tree you already use. You can use both.
+diffview.nvim は専用のタブを開き、左右に並べた差分とファイル一覧を表示します。レビューにはとても便利です。
+diffbase はレイアウトを一切変えません。本物のバッファを編集し続けたまま、その上に差分をハイライトとして
+重ね、普段使っているファイルツリーに行数を出します。両方を併用できます。
 
-### How is this different from gitsigns' `change_base` alone?
+### gitsigns の `change_base` だけとは何が違う？
 
-`change_base` is what diffbase uses for the line highlights. On top of it, diffbase adds:
+diffbase も行のハイライトには `change_base` を使っています。その上に次のものを足しています。
 
-- presets that resolve to a merge-base (whole-branch changes, unpushed work), with default-branch
-  detection,
-- turning linehl, numhl, word_diff and show_deleted on together and restoring your own values afterwards,
-- a palette that is applied and later restored,
-- `+added -removed` counts in neo-tree, and optionally neo-tree's own git markers on the same base (but see
-  the known issue below),
-- untracked files counted and highlighted as new,
-- a new-file highlight that works without gitsigns,
-- commit view (one commit against its parent, then back),
-- a statusline string and a `DiffBaseChanged` event.
+- merge-base で解決するプリセット（ブランチ全体の変更、未 push の変更）とデフォルトブランチの自動検出
+- linehl・numhl・word_diff・show_deleted をまとめて ON にし、後で自分の設定値に戻す仕組み
+- 適用して後で元に戻す配色
+- neo-tree の `+追加 -削除` 表示と、任意で neo-tree 自身の git マークの基準合わせ（下の既知の問題も参照）
+- 未追跡ファイルの集計と、新規ファイルとしてのハイライト
+- gitsigns なしでも動く新規ファイルのハイライト
+- コミット表示（1 コミットを親と比べ、終わったら戻る）
+- ステータスライン用の文字列と `DiffBaseChanged` イベント
 
-### neo-tree shows `attempt to index local 'git_status' (a boolean value)`
+### neo-tree が `attempt to index local 'git_status' (a boolean value)` を出す
 
-This only matters with `neotree = { git_base = true }`. Your neo-tree is older than 3.42.0 (commit
-`6679b93`), which fixed setting a git base. Update neo-tree, or go back to the default `git_base = false`. You can confirm it is
-unrelated to diffbase with a plain `:Neotree git_base=HEAD~1`. diffbase recognizes the affected builds and
-does not set the base on them; `:checkhealth diffbase` warns about it.
+`neotree = { git_base = true }` のときだけ起きます。neo-tree が 3.42.0（コミット `6679b93`）より古い版です。このコミットで
+git の基準を設定したときの不具合が直っています。neo-tree を更新するか、既定の `git_base = false` に戻して
+ください。diffbase と関係ないことは、`:Neotree git_base=HEAD~1` を単独で実行すると
+確かめられます。diffbase はこの古い版を見分けて基準を設定せず、`:checkhealth diffbase` で警告します。
 
-### neo-tree git markers go blank
+### neo-tree の git マークが消える
 
-This only happens with `neotree = { git_base = true }`. On current neo-tree builds (tested at `ffdf8d9`),
-setting or clearing a git base on a tree that is already open empties neo-tree's git status: the M, ?, ✗
-markers disappear, the Git tab says "working tree clean", and after `:DiffBase off` the markers stay blank
-until the output of `git status` changes (for example when you create or edit a file). The same happens without diffbase: run `:Neotree show`, then
-`:Neotree show git_base=HEAD~1`. The cause is in neo-tree (when the `git status` output is unchanged, its
-cached path passes an empty status table on), so diffbase cannot work around it. If the markers matter to
-you, keep the default `git_base = false`: diffbase then never touches neo-tree's git base, and the
-`+added -removed` counts keep working.
+`neotree = { git_base = true }` のときだけ起きます。現在の neo-tree（`ffdf8d9` で確認）では、すでに開いているツリーに git の基準を設定・解除すると、neo-tree の
+git status が空になります。M、?、✗ のマークが消え、Git タブは "working tree clean" と表示し、
+`:DiffBase off` の後も `git status` の出力が変わる（ファイルを作る・編集するなど）までマークは消えたままです。
+diffbase を使わなくても、`:Neotree show` の後に `:Neotree show git_base=HEAD~1` を実行すると同じことが
+起きます。原因は neo-tree 側（`git status` の出力が前回と同じとき、キャッシュを使う経路が空の status を
+渡してしまう）にあり、diffbase からは回避できません。マークが必要なら既定の `git_base = false` のままに
+してください。diffbase は neo-tree の git の基準に触れなくなり、`+追加 -削除` の表示はそのまま動きます。
 
-### "no upstream branch is configured for '<branch>'"
+### "no upstream branch is configured for '<branch>'" と出る
 
-The `unpushed` base needs an upstream. Set one with `git push -u` or `git branch --set-upstream-to`.
-Related messages:
+`unpushed` を使うには upstream の設定が必要です。`git push -u` か `git branch --set-upstream-to` で
+設定してください。関連するメッセージ：
 
-- "the upstream branch '<remote>/<branch>' of '<branch>' is gone (deleted on the remote)": the upstream
-  was deleted and pruned. Push the branch again with `git push -u`, or set another upstream.
-- "HEAD is detached; 'unpushed' needs a branch with an upstream": switch to a branch first.
+- "the upstream branch '<remote>/<branch>' of '<branch>' is gone (deleted on the remote)"：upstream の
+  ブランチがリモートで削除され、prune 済みです。`git push -u` でもう一度 push するか、別の upstream を
+  設定してください。
+- "HEAD is detached; 'unpushed' needs a branch with an upstream"：先にブランチへ切り替えてください。
 
-### The `main` base picked the wrong branch
+### `main` が違うブランチを選ぶ
 
-Set `default_branch = "origin/develop"` (or any ref), or fix `origin/HEAD` with
-`git remote set-head origin --auto`.
+`default_branch = "origin/develop"`（任意の ref）を設定するか、`git remote set-head origin --auto` で
+`origin/HEAD` を直してください。
 
-### Does it touch my repository?
+### リポジトリを書き換える？
 
-Only commit view changes anything: it runs `git switch --detach <commit>`, and later
-`git switch <your branch>` for `back`. Every other git call is read-only, and the stats computation runs
-with `GIT_OPTIONAL_LOCKS=0` so it does not take git's optional locks.
+書き換えるのはコミット表示だけです。`git switch --detach <commit>` を実行し、`back` で
+`git switch <元のブランチ>` を実行します。それ以外の git コマンドはすべて読み取りのみです。行数の集計は
+`GIT_OPTIONAL_LOCKS=0` をつけて実行するので、git の任意のロックも取りません。
 
-## License
+## ライセンス
 
-MIT. See [LICENSE](LICENSE).
+MIT。[LICENSE](LICENSE) を参照してください。

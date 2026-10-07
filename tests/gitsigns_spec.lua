@@ -235,4 +235,43 @@ T["ON then OFF in the same tick: OFF wins"] = function()
   h.eq(nil, fake.config.base)
 end
 
+T["a buffer gitsigns attached with the old base is pointed at the current base on GitSignsUpdate"] = function()
+  local fx = h.fixture()
+  local fake = h.fake_gitsigns()
+  on(fx, fake)
+  local buf = vim.api.nvim_get_current_buf()
+  -- gitsigns read the global base before diffbase changed it: the buffer still diffs against the index.
+  local bcache = { git_obj = { revision = nil } }
+  package.loaded["gitsigns.cache"] = { cache = { [buf] = bcache } }
+  local function update()
+    vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", data = { buffer = buf }, modeline = false })
+  end
+  local function local_calls()
+    return vim.tbl_filter(function(c)
+      return c[1] == "change_base" and c[3] == false
+    end, fake.calls)
+  end
+
+  update()
+  h.wait_for(function()
+    return #local_calls() == 1
+  end, "buffer-local change_base")
+  h.eq({ "change_base", fx.second, false }, local_calls()[1])
+
+  -- In sync now: no further calls.
+  bcache.git_obj.revision = fx.second
+  vim.wait(50)
+  update()
+  vim.wait(50)
+  h.eq(1, #local_calls())
+
+  -- OFF: updates are left alone.
+  off(fake)
+  bcache.git_obj.revision = "something-else"
+  update()
+  vim.wait(50)
+  h.eq(1, #local_calls())
+  package.loaded["gitsigns.cache"] = nil
+end
+
 return T

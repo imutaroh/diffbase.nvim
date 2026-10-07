@@ -25,6 +25,16 @@ local active = false
 -- Bumped by every enable() / disable(): the change_base callback of a superseded call does nothing.
 local gen = 0
 
+-- The base diffbase set while ON (nil while OFF).
+---@type string|nil
+local current_base = nil
+
+-- Buffers with a pending buffer-local change_base from resync().
+---@type table<integer, boolean>
+local resyncing = {}
+
+local augroup = vim.api.nvim_create_augroup("diffbase_gitsigns", { clear = true })
+
 ---@return table|nil
 local function gitsigns()
   local ok, gs = pcall(require, "gitsigns")
@@ -81,6 +91,49 @@ local function change_base(gs, base, cb)
   end
 end
 
+---gitsigns reads the global base when it starts attaching a buffer, and a global change_base only updates
+---buffers that have finished attaching. A buffer that was attaching while diffbase turned ON (e.g. the file
+---given on the command line with `:DiffBase` run at startup) keeps diffing against the old base. Point such
+---a buffer at the current base when gitsigns reports an update for it.
+---@param buf integer
+local function resync(buf)
+  if not active or not current_base or resyncing[buf] or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  local ok, rev = pcall(function()
+    return require("gitsigns.cache").cache[buf].git_obj.revision
+  end)
+  if not ok or rev == current_base then
+    return
+  end
+  local gs = gitsigns()
+  if not gs then
+    return
+  end
+  resyncing[buf] = true
+  local function done()
+    resyncing[buf] = nil
+  end
+  -- A buffer-local change_base acts on the current buffer.
+  local called = pcall(vim.api.nvim_buf_call, buf, function()
+    gs.change_base(current_base, false, vim.schedule_wrap(done))
+  end)
+  if not called then
+    done()
+  end
+end
+
+vim.api.nvim_create_autocmd("User", {
+  group = augroup,
+  pattern = "GitSignsUpdate",
+  callback = function(ev)
+    local buf = type(ev.data) == "table" and ev.data.buffer or nil
+    if type(buf) == "number" then
+      resync(buf)
+    end
+  end,
+})
+
 ---Point gitsigns at `base` for all buffers and enable the configured toggles.
 ---@param base string
 ---@param opts diffbase.GitsignsConfig
@@ -102,6 +155,7 @@ function M.enable(base, opts)
     end
   end
   active = true
+  current_base = base
   local on = {}
   for flag in pairs(FLAGS) do
     if opts[flag] then
@@ -119,6 +173,7 @@ function M.disable()
     return
   end
   active = false
+  current_base = nil
   local snap = saved
   local gs = gitsigns()
   if not gs or not snap then

@@ -584,15 +584,36 @@ T["works with no integrations installed"] = function()
   h.no_warnings()
 end
 
+---Run diffbase's health check with vim.health captured (the :checkhealth buffer layout differs between
+---Neovim versions). Returns one "LEVEL message" line per report.
+---@return string
+local function health_text()
+  local lines = {}
+  local saved = {}
+  for _, level in ipairs({ "start", "ok", "info", "warn", "error" }) do
+    saved[level] = vim.health[level]
+    vim.health[level] = function(msg)
+      lines[#lines + 1] = level:upper() .. " " .. tostring(msg)
+    end
+  end
+  local ok, err = pcall(require("diffbase.health").check)
+  for level, fn in pairs(saved) do
+    vim.health[level] = fn
+  end
+  assert(ok, tostring(err))
+  return table.concat(lines, "\n")
+end
+
 T[":checkhealth diffbase runs"] = function()
   local fx = h.fixture({ origin = true })
   -- the health buffer is not a file buffer, so the repository comes from cwd
   vim.cmd.cd(vim.fn.fnameescape(fx.dir))
+  -- The real command must not throw on any Neovim version.
   vim.cmd("silent checkhealth diffbase")
-  local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  vim.cmd("silent! tabclose")
+  local text = health_text()
   h.contains(text, "default branch: origin/main")
   h.ok(not text:find("ERROR", 1, true), text)
-  vim.cmd("silent! tabclose")
 end
 
 T[":checkhealth diffbase reports git older than 2.24 as an error"] = function()
@@ -607,9 +628,7 @@ T[":checkhealth diffbase reports git older than 2.24 as an error"] = function()
   local path = vim.env.PATH
   vim.env.PATH = bin .. ":" .. path
   local ok, err = pcall(function()
-    vim.cmd("silent checkhealth diffbase")
-    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
-    vim.cmd("silent! tabclose")
+    local text = health_text()
     h.contains(text, "git version 2.20.1: git >= 2.24 required")
     h.contains(text, "ERROR")
   end)
@@ -624,9 +643,7 @@ T[":checkhealth diffbase reports the active state when cwd is outside the reposi
   h.on_and_wait(function()
     return db()._open_commit(fx.dir, fx.second)
   end)
-  vim.cmd("silent checkhealth diffbase")
-  local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
-  vim.cmd("silent! tabclose")
+  local text = health_text()
   h.contains(text, "active: commit")
   h.contains(text, "in commit view (HEAD detached)")
   h.contains(text, "repository: " .. fx.dir)

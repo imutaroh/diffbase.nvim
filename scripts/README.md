@@ -12,6 +12,8 @@ scripts/demo.sh [scene] [dir]
 `dir` defaults to `${TMPDIR:-/tmp}/diffbase-demo`. The repository is rebuilt from scratch on every run,
 with a fixed author and fixed dates, so the commit hashes never change. The script deletes `dir` only when
 it is empty or carries the `.diffbase-demo` marker that the script itself writes; otherwise it refuses.
+It also refuses a `dir` that another user owns or that others can write to, since Neovim sources the scene
+files written there.
 
 What the demo repository contains:
 

@@ -65,15 +65,34 @@ if [ -e "$DIR" ] && [ ! -d "$DIR" ]; then
   echo "demo.sh: '$DIR' exists and is not a directory" >&2
   exit 1
 fi
+
+# The default lives in a shared /tmp when TMPDIR is unset. A directory someone else created there could
+# have its scene files swapped before Neovim sources them, so only use one that is ours and that nobody
+# else can write to. Checked again after mkdir, since the directory may appear in between.
+check_owner() {
+  if [ ! -O "$DIR" ] || [ -n "$(find "$DIR" -maxdepth 0 \( -perm -020 -o -perm -002 \))" ]; then
+    echo "demo.sh: '$DIR' is not owned by you or is writable by others; refusing to use it" >&2
+    exit 1
+  fi
+}
+
 if [ -d "$DIR" ]; then
+  check_owner
   if [ -f "$DIR/$MARKER" ]; then
     rm -rf "$DIR"
-  elif [ -n "$(ls -A "$DIR")" ]; then
-    echo "demo.sh: '$DIR' is not empty and has no $MARKER marker; refusing to delete it" >&2
-    exit 1
+  else
+    if ! listing=$(ls -A "$DIR"); then
+      echo "demo.sh: cannot list '$DIR'" >&2
+      exit 1
+    fi
+    if [ -n "$listing" ]; then
+      echo "demo.sh: '$DIR' is not empty and has no $MARKER marker; refusing to delete it" >&2
+      exit 1
+    fi
   fi
 fi
 mkdir -p "$DIR"
+check_owner
 : >"$DIR/$MARKER"
 
 # ---------------------------------------------------------------------------------------------------
